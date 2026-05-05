@@ -36,6 +36,12 @@
 #include "ServiceMonitor.h"
 #include "lowlatency_util_apis.h"
 pthread_t tid[NUM_PTHREADS];
+/* Copilot/Coverity: Do NOT use PTHREAD_COND_INITIALIZER here.
+ * PTHREAD_COND_INITIALIZER does not support clock attributes (e.g., CLOCK_MONOTONIC).
+ * Re-initializing a cond var that was already statically initialized via pthread_cond_init
+ * without a prior pthread_cond_destroy is undefined behavior (POSIX). Both are initialized
+ * exactly once via pthread_cond_init(CLOCK_MONOTONIC) before first use - see
+ * LatencyMeasurement_Config_Init() and UpdateLatencyMeasurement_EnableCount(). */
 pthread_cond_t Monitor_cond;
 pthread_cond_t cond;
 pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
@@ -74,6 +80,11 @@ void* isMonitorService_thread_free(void *arg)
     UNREFERENCED_PARAMETER(arg);
     struct timespec ts;
     int Status = 0;
+    /* Copilot: pthread_condattr_t SyncAttr / pthread_cond_init(&cond) block was removed.
+     * cond is a shared global - re-initializing it inside this thread body each time the
+     * thread is created is undefined behavior (re-init without destroy while other threads
+     * may be waiting on it). cond is initialized exactly once in
+     * UpdateLatencyMeasurement_EnableCount() before this thread is first created. */
     memset(&ts, 0, sizeof(ts));
     clock_gettime(CLOCK_MONOTONIC, &ts);
     ts.tv_nsec = 0;
@@ -757,6 +768,8 @@ void *SysEventHandlerThrd_for_Monitorservice(void *data)
 			}
 		}
 	}
+	/* Copilot: sysevent_fd is local to this thread - close it before detaching
+	 * to avoid leaking the file descriptor when this thread exits. */
 	if(sysevent_fd >= 0)
 	{
 		sysevent_close(sysevent_fd, sysevent_token);
@@ -794,6 +807,11 @@ void* LatencyMeasurement_MonitorService(void *arg)
     {
         CcspTraceInfo(("%s Successfully created SysEventHandlerThrd_for_Monitorservice thread \n", __func__));
     }
+    /* Copilot: pthread_condattr_t SyncAttr / pthread_cond_init(&Monitor_cond) block was removed.
+     * Monitor_cond is a shared global - re-initializing it here each time this thread starts
+     * is undefined behavior while other threads (e.g., SendConditional_pthread_cond_signal,
+     * SysEventHandlerThrd) may be waiting or signaling it. Monitor_cond is initialized
+     * exactly once in LatencyMeasurement_Config_Init() before this thread is created. */
     LatencyMeasurementServiceInit();
     sysevent_get(sysevent_fd_g, sysevent_token_g, "current_wan_ifname", current_wan_ifname, sizeof(strValue));
     sysevent_get(sysevent_fd_g, sysevent_token_g, "current_wan_mode_update", strValue, sizeof(strValue));

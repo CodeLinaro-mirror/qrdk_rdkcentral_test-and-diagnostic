@@ -201,6 +201,7 @@ LatencyMeasure_PublishToEvent
 	}
     /* release rbus value and object variable */
     rbusValue_Release(value);
-    rbusObject_Release(data);
+    rbusObject_Release(data); /* Copilot: data (rbusObject) was not released - added to prevent rbus object leak */
+
     return ret;
 }
