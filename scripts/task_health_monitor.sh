@@ -4158,6 +4158,7 @@ if [ "$xle_device_mode" -ne "1" ]; then #zebra for non xle
             echo_t "RDKB_PROCESS_CRASHED : zebra is not running, restarting the zebra"
             t2CountNotify "SYS_SH_Zebra_restart"
             /etc/utopia/registration.d/20_routing restart
+            echo_t "ZEBRA_RESTART_TRACE component=test-and-diagnostic pid=$$ ppid=$PPID site=$0:zebra_health_check reason=zebra_missing_with_WAN_started_in_router_mode wan_status=$WAN_STATUS bridge_mode=$BR_MODE" >&2
             sysevent set zebra-restart
         fi
     fi
