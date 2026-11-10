@@ -1723,6 +1723,8 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
         int flags = fcntl(pfd[idx].fd, F_GETFL);
         if (fcntl(pfd[idx].fd, F_SETFL, flags | O_NONBLOCK) == -1) {
             WANCHK_LOG_ERROR("Unable to set close-on-exec flag!\n");
+            close(pfd[idx].fd);
+            pfd[idx].fd = -1;
             idx++;
             continue;
         }
@@ -1740,6 +1742,8 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
                 if (!pkt_len) {
                     // Error in sending raw packet
                     WANCHK_LOG_ERROR("Error in Sending Raw Packet for nameserver %s\n", query_info.ns);
+                    close(pfd[idx].fd);
+                    pfd[idx].fd = -1;
                     idx++;
                     break;
                 }
@@ -1761,6 +1765,8 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
             if (write(pfd[idx].fd, packet, pkt_len) < 0) {
                 // Error writing to socket
                 WANCHK_LOG_WARN("Write failed for nameserver %s on interface %s\n", query_info.ns, query_info.ifname);
+                close(pfd[idx].fd);
+                pfd[idx].fd = -1;
                 break;
             } else {
                 WANCHK_LOG_DBG("Write success for nameserver %s on interface %s\n", query_info.ns, query_info.ifname);
