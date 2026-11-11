@@ -1729,6 +1729,10 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
             continue;
         }
     
+        // Tracks whether a query has already been written on this socket, so a later
+        // failure doesn't discard an earlier response still pending on the same fd.
+        BOOL query_sent_on_socket = FALSE;
+
         // Iterate through the queries and send them
         for (int i = 0; i < query_info.query_count; i++) {
             if (query_list[i].resp_recvd) {
@@ -1742,9 +1746,11 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
                 if (!pkt_len) {
                     // Error in sending raw packet
                     WANCHK_LOG_ERROR("Error in Sending Raw Packet for nameserver %s\n", query_info.ns);
-                    close(pfd[idx].fd);
-                    pfd[idx].fd = -1;
-                    idx++;
+                    if (!query_sent_on_socket) {
+                        close(pfd[idx].fd);
+                        pfd[idx].fd = -1;
+                        idx++;
+                    }
                     break;
                 }
             }
@@ -1765,12 +1771,16 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
             if (write(pfd[idx].fd, packet, pkt_len) < 0) {
                 // Error writing to socket
                 WANCHK_LOG_WARN("Write failed for nameserver %s on interface %s\n", query_info.ns, query_info.ifname);
-                close(pfd[idx].fd);
-                pfd[idx].fd = -1;
+                if (!query_sent_on_socket) {
+                    close(pfd[idx].fd);
+                    pfd[idx].fd = -1;
+                    idx++;
+                }
                 break;
             } else {
                 WANCHK_LOG_DBG("Write success for nameserver %s on interface %s\n", query_info.ns, query_info.ifname);
                 ret = 0; // Successful write
+                query_sent_on_socket = TRUE;
             }
         }
 
