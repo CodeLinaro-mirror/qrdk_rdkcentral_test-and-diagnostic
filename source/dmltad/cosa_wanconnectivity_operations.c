@@ -1732,6 +1732,9 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
         // Tracks whether a query has already been written on this socket, so a later
         // failure doesn't discard an earlier response still pending on the same fd.
         BOOL query_sent_on_socket = FALSE;
+        // Tracks whether idx was already advanced this iteration, to avoid double-advancing
+        // when ret is still 0 from an earlier slot's success.
+        BOOL idx_advanced = FALSE;
 
         // Iterate through the queries and send them
         for (int i = 0; i < query_info.query_count; i++) {
@@ -1750,6 +1753,7 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
                         close(pfd[idx].fd);
                         pfd[idx].fd = -1;
                         idx++;
+                        idx_advanced = TRUE;
                     }
                     break;
                 }
@@ -1775,6 +1779,7 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
                     close(pfd[idx].fd);
                     pfd[idx].fd = -1;
                     idx++;
+                    idx_advanced = TRUE;
                 }
                 break;
             } else {
@@ -1784,7 +1789,7 @@ int send_query (PCOSA_DML_WANCNCTVTY_CHK_QUERYNOW_CTXT_INFO pQuerynowCtxt, struc
             }
         }
 
-        if (ret == 0) {
+        if (ret == 0 && !idx_advanced) {
             idx++;
         }
         // Update the previous query type
