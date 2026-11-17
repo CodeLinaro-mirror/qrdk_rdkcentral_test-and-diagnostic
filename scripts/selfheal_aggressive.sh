@@ -100,6 +100,52 @@ Dhcpv6_Client_restart ()
 	fi
 
 	process_restart_need=0
+    if [ "$2" = "lan_ipv6_missing" ]; then
+        local bridge_mode erouter_mode wan_addresses lan_addresses address
+
+        if [ "$1" != "ti_dhcp6c" ] || [ "$WAN_INTERFACE" != "erouter0" ] ||
+           [ "$WAN_STATUS" != "started" ] || [ "$DHCPV6C_STATUS" = "false" ] ||
+           [ "$Unit_Activated" = "0" ]; then
+            return 0
+        fi
+        if ! bridge_mode=$(syscfg get bridge_mode) ||
+           ! erouter_mode=$(syscfg get last_erouter_mode); then
+            echo_t "[RDKB_SELFHEAL] : Failed to read router mode for ti_dhcp6c IPv6 recovery"
+            return 1
+        fi
+        case "$bridge_mode:$erouter_mode" in
+            "0:2"|"0:3") ;;
+            *) return 0 ;;
+        esac
+
+        if ! wan_addresses=$(ip -6 addr show dev "$WAN_INTERFACE" scope global) ||
+           ! wan_addresses=$(printf '%s\n' "$wan_addresses" | awk '
+            $1 == "inet6" { address = ($0 ~ /scope global/) ? $2 : ""; next }
+            $1 == "valid_lft" && $2 == "forever" && address != "" { print address; address = "" }
+        '); then
+            echo_t "[RDKB_SELFHEAL] : Failed to read $WAN_INTERFACE IPv6 lifetimes"
+            return 1
+        fi
+        [ -n "$wan_addresses" ] || return 0
+        if ! lan_addresses=$(ip -6 addr show dev "$PRIVATE_LAN" scope global) ||
+           ! lan_addresses=$(printf '%s\n' "$lan_addresses" |
+                             awk '$1 == "inet6" && /scope global/ { print $2 }'); then
+            echo_t "[RDKB_SELFHEAL] : Failed to read $PRIVATE_LAN IPv6 addresses"
+            return 1
+        fi
+        [ -z "$lan_addresses" ] || return 0
+
+        for address in $wan_addresses; do
+            if ip -6 addr del "$address" dev "$WAN_INTERFACE"; then
+                echo_t "[RDKB_SELFHEAL] : Deleted $WAN_INTERFACE IPv6 address $address with valid_lft forever; $PRIVATE_LAN has no global IPv6 address"
+                process_restart_need=1
+            else
+                echo_t "[RDKB_SELFHEAL] : Failed to delete $WAN_INTERFACE IPv6 address $address"
+            fi
+        done
+        [ "$process_restart_need" = "1" ] || return 1
+        echo_t "[RDKB_SELFHEAL] : Restarting ti_dhcp6c to recover $PRIVATE_LAN IPv6"
+    fi
 	if [ "$2" = "restart_for_dibbler-server" ];then
         	PAM_UP="$(busybox pidof CcspPandMSsp)"
 		if [ "$PAM_UP" != "" ];then
@@ -946,6 +992,10 @@ self_heal_dhcp_clients()
         "TCCBR")
             ;;
     esac
+    if [ "$DHCPv6_TYPE" = "ti_dhcp6c" ]; then
+        Dhcpv6_Client_restart "ti_dhcp6c" "lan_ipv6_missing"
+    fi
+
     #dibbler-client selfheal not required on SCER11BEL since WAN Unification use case will cover under WANManager.
     if [ "$BOX_TYPE" != "HUB4" ] && [ "$BOX_TYPE" != "SR300" ] && [ "$BOX_TYPE" != "SE501" ] && [ "$BOX_TYPE" != "SR213" ] && [ "$BOX_TYPE" != "WNXL11BWL" ] && [ -f "$DHCPV6_ERROR_FILE" ] && [ "$WAN_STATUS" = "started" ] && [ "$WAN_IPv6_Addr" != "" ] && [ "$BOX_TYPE" != "SCER11BEL" ] && [ "$BOX_TYPE" != "SCXF11BFL" ] && [ "$BOX_TYPE" != "XER2" ]; then
         isIPv6=$(ifconfig $WAN_INTERFACE | grep "inet6" | grep "Scope:Global")

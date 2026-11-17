@@ -16,6 +16,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
+ti_dhcp6c IPv6 self-heal
+----------------------
+The existing Dhcpv6_Client_restart functions in selfheal_aggressive.sh and
+task_health_monitor.sh handle the lan_ipv6_missing reason for erouter0 global
+IPv6 addresses with valid_lft forever when brlan0 has no global IPv6 address.
+They delete only the matching forever addresses, then continue through the
+existing stop/start sequence once. Finite-lifetime and link-local WAN
+addresses are preserved; LAN link-local addresses do not prevent recovery.
+
+The check requires ti_dhcp6c, a started WAN, an activated unit, router mode
+with IPv6 enabled, and DHCP monitoring enabled. Failed address queries
+prevent deletion. Failed deletions are logged; a restart occurs only if at
+least one address was deleted successfully. Scheduling and the existing
+platform-specific DHCPv6 restart paths are unchanged.
+
 1. Build
 
 a> Set up following environment variables before invoking cosa_build.
